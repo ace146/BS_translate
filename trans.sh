@@ -13,14 +13,17 @@ fi
 /sbin/insmod ./$module.ko $* || exit 1
 
 # remove stale nodes
-rm -rf /dev/${device}
+rm -rf /dev/${device}*
 
 major=$(cat /proc/devices | grep -m 1 $device | cut -f 1 -d ' ')
 
-mknod /dev/${device} c $major 0
+mknod /dev/${device}0 c $major 0
+mknod /dev/${device}1 c $major 1
 
 # give appropriate group/permissions, and change the group.
 group="users"
 
-chgrp $group /dev/${device}
-chmod $mode  /dev/${device} 
+chgrp $group /dev/${device}0
+chmod $mode  /dev/${device}0
+chgrp $group /dev/${device}1
+chmod $mode  /dev/${device}1
