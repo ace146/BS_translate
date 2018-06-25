@@ -49,7 +49,7 @@
 #endif
 
 #ifndef TRANSLATE_NR_DEVS
-#define TRANSLATE_NR_DEVS 1   
+#define TRANSLATE_NR_DEVS 2   
 #endif
 
 

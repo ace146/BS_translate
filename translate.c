@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
+#include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -26,6 +26,7 @@
 #include <linux/cdev.h>
 #include <asm/uaccess.h>
 #include <linux/mutex.h>
+#include <linux/string.h>
 
 #include "translate.h"
 
@@ -44,7 +45,7 @@ static int trans_nr_devs = TRANSLATE_NR_DEVS;
 
 dev_t dev_num = 0;
 
-static struct trans {
+struct trans {
     int minor;
     int read;
     int write;
@@ -52,46 +53,34 @@ static struct trans {
     struct cdev cdev;
 };
 
-struct trans trans0 = {
-    .minor = 0,
-    .read = 0,
-    .write = 0,
-    .buffer = {0},
-};
-
-struct trans trans1 = {
-    .minor = 1,
-    .read = 0,
-    .write = 0,
-    .buffer = {0},
-};
+static struct trans * trans0;
+static struct trans * trans1;
 
 static struct mutex trans_mutex;
+static struct trans *trans_data;
 
 static int
 trans_open(struct inode *inode, struct file *file) {
     PDEBUG("open \n");
     mutex_lock(&trans_mutex);
 
-    struct trans * trans_data;
-
-    trans_data = containerof(inode->i_cdev, struct trans, cdev);
+    trans_data = container_of(inode->i_cdev, struct trans, cdev);
 
     file->private_data = trans_data;
 
     if(file->f_mode & FMODE_READ){
-        if(trans_data.read){
+        if(trans_data->read){
             mutex_unlock(&trans_mutex);
             return -EBUSY;
         }
-        trans_data.read = 1;
+        trans_data->read = 1;
     }
     if(file->f_mode & FMODE_READ){
-        if(trans_data.write){
+        if(trans_data->write){
             mutex_unlock(&trans_mutex);
             return -EBUSY;
         }
-        trans_data.write = 1;
+        trans_data->write = 1;
     }
 
 
@@ -103,14 +92,13 @@ static int
 trans_close (struct inode * inode, struct file *file) {
     PDEBUG("close \n");
     mutex_lock(&trans_mutex);
-    struct trans * trans_data;
     trans_data = (struct trans *)file->private_data;
 
     if (file->f_mode & FMODE_READ)
-        trans_data.read = 0;
+        trans_data->read = 0;
 
     if (file->f_mode & FMODE_WRITE)
-        trans_data.write = 0;
+        trans_data->write = 0;
 
     mutex_unlock(&trans_mutex);
     return 0;
@@ -119,16 +107,14 @@ trans_close (struct inode * inode, struct file *file) {
 
 static ssize_t
 trans_read(struct file *file, char __user *user_buffer, size_t size, loff_t *offset) {
-    PDEBUG("read \n");
-    struct trans * trans_data;
-    trans_data = (struct trans *)file->private_data;
-    
     size_t bytes_not_copied;
-    
+    PDEBUG("read \n");
+    trans_data = (struct trans *)file->private_data;
+     
     mutex_lock(&trans_mutex);
     PDEBUG("String to print: %s", trans_data.buffer);
     
-    bytes_not_copied = copy_to_user(user_buffer, trans_data.buffer, strlen(trans_data.buffer));
+    bytes_not_copied = copy_to_user(user_buffer, trans_data->buffer, strlen(trans_data->buffer));
 
     PDEBUG("bytes_not_copied: %zu", bytes_not_copied);
 
@@ -138,20 +124,19 @@ trans_read(struct file *file, char __user *user_buffer, size_t size, loff_t *off
 }
 
 static void
-ceaser_encript (int minor) {
-    char i = buffer[0];
+ceaser_encript (struct trans* dev) {
+    char i = dev->buffer[0];
     int c = 0;
     PDEBUG("MINOR-> %d", minor);
 
     while (i != 0) {
-        if (minor == 0) {
-            buffer[c] = buffer[c] + rot;
-        } else {
-            buffer[c] = buffer[c] - rot;
-
-        }
+	if (dev->minor == 0) {
+            dev->buffer[c] = dev->buffer[c] + rot;
+	} else {
+            dev->buffer[c] = dev->buffer[c] - rot;
+	}
         c++;
-        i = buffer[c];
+        i = dev->buffer[c];
     }
 }
 
@@ -159,18 +144,17 @@ static ssize_t
 trans_write (struct file * file, const char __user * user_buffer, size_t size, loff_t * offset) {
     PDEBUG("write \n");
     mutex_lock(&trans_mutex);
-    struct trans * trans_data;
 
     trans_data = (struct trans *)file->private_data;
 
-    if (copy_from_user(trans_data.buffer, user_buffer, size)) {
+    if (copy_from_user(trans_data->buffer, user_buffer, size)) {
         PDEBUG("cannot copy all input to kernel buffer. Exiting");
         mutex_unlock(&trans_mutex);
         return -EFAULT;
 
     }
 
-    ceaser_encript(trans_data.minor);
+    ceaser_encript(trans_data);
 
     mutex_unlock(&trans_mutex);
     return size;
@@ -188,10 +172,10 @@ const struct file_operations trans_fops = {
 
 static int
 trans_init(void) {
-    PDEBUG("Init\n");
     int err;
+    PDEBUG("Init\n");
 
-    err = alloc_chrdev_region(&dev_num, trans0.minor, trans_nr_devs, MY_DEVICE_NAME);
+    err = alloc_chrdev_region(&dev_num, trans0->minor, trans_nr_devs, MY_DEVICE_NAME);
     trans_major = MAJOR(dev_num);
         
     if (err < 0) {
@@ -201,30 +185,38 @@ trans_init(void) {
 
     mutex_init(&trans_mutex);
     
-    trans0 = kmalloc(sizeof(struct trans), GFP_KERNEL);
+    trans0 = (struct trans *) kmalloc(sizeof(struct trans *), GFP_KERNEL);
     if (!trans0) {
         PDEBUG("kmalloc trans0 error\n");
         return -ENOMEM;
     }
-    trans1 = kmalloc(sizeof(struct trans), GPF_KERNEL);
+    trans1 = (struct trans *) kmalloc(sizeof(struct trans *), GFP_KERNEL);
     if (!trans1) {
         PDEBUG("kmalloc trans1 error\n");
         return -ENOMEM;
     }
     
 
-    cdev_init(&trans0.cdev, &trans_fops);
-    trans0.cdev.owner = THIS_MODULE;
-    err = cdev_add (&trans0.cdev, dev_num, 1);
+    cdev_init(&trans0->cdev, &trans_fops);
+    trans0->cdev.owner = THIS_MODULE;
+    trans0->minor = 0;
+    trans0->read = 0;
+    trans0->write = 0;
+    memset (trans0->buffer, 0, sizeof(trans0->buffer));
+    err = cdev_add (&trans0->cdev, dev_num, 1);
 
     if (err) {
         PDEBUG("Error %d adding trans0", err);
     }
 
-    cdev_init(&trans1.cdev, &trans_fops);
-    trans1.cdev.owner = THIS_MODULE;
-    dev_num = MKDEV(trans_major, trans1.minor);
-    err = cdev_add (&trans1.cdev, dev_num, 1);
+    cdev_init(&trans1->cdev, &trans_fops);
+    trans1->cdev.owner = THIS_MODULE;
+    trans1->minor = 0;
+    trans1->read = 0;
+    trans1->write = 0;
+    memset (trans1->buffer, 0, sizeof(trans1->buffer));
+    dev_num = MKDEV(trans_major, trans1->minor);
+    err = cdev_add (&trans1->cdev, dev_num, 1);
 
     if (err) {
         PDEBUG("Error %d adding trans1", err);
@@ -236,10 +228,10 @@ trans_init(void) {
 static void
 trans_exit(void) {
     PDEBUG("Exit \n");
-    cdev_del(&trans0.cdev);
-    cdev_del(&trans1.cdev);
+    cdev_del(&trans0->cdev);
+    cdev_del(&trans1->cdev);
 
-    dev_num = MKDEV(trans_major, trans0.minor);
+    dev_num = MKDEV(trans_major, trans0->minor);
     unregister_chrdev_region(dev_num, trans_nr_devs);
 
     kfree(trans0);
