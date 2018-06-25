@@ -61,7 +61,7 @@ static struct mutex trans_mutex;
 static int
 trans_open(struct inode *inode, struct file *file) {
     struct trans *trans_data;
-    PDEBUG("open \n");
+    printk(KERN_INFO"trans: open \n");
     mutex_lock(&trans_mutex);
 
     trans_data = container_of(inode->i_cdev, struct trans, cdev);
@@ -91,7 +91,7 @@ trans_open(struct inode *inode, struct file *file) {
 static int
 trans_close (struct inode * inode, struct file *file) {
     struct trans *trans_data;
-    PDEBUG("close \n");
+    printk(KERN_INFO"trans: close \n");
     mutex_lock(&trans_mutex);
     trans_data = (struct trans *)file->private_data;
 
@@ -110,15 +110,15 @@ static ssize_t
 trans_read(struct file *file, char __user *user_buffer, size_t size, loff_t *offset) {
     size_t bytes_not_copied;
     struct trans *trans_data;
-    PDEBUG("read \n");
+    printk(KERN_INFO"trans: read \n");
     trans_data = (struct trans *)file->private_data;
      
     mutex_lock(&trans_mutex);
-    PDEBUG("String to print: %s", trans_data.buffer);
+    printk(KERN_INFO"String to print: %s\n", trans_data.buffer);
     
     bytes_not_copied = copy_to_user(user_buffer, trans_data->buffer, strlen(trans_data->buffer));
 
-    PDEBUG("bytes_not_copied: %zu", bytes_not_copied);
+    printk(KERN_INFO "bytes_not_copied: %zu\n", bytes_not_copied);
 
     mutex_unlock(&trans_mutex);
 
@@ -129,7 +129,7 @@ static void
 ceaser_encript (struct trans* dev) {
     char i = dev->buffer[0];
     int c = 0;
-    PDEBUG("MINOR-> %d", minor);
+    printk(KERN_INFO"trans%d: encript  \n", dev->minor);
 
     while (i != 0) {
     if (dev->minor == 0) {
@@ -145,13 +145,13 @@ ceaser_encript (struct trans* dev) {
 static ssize_t
 trans_write (struct file * file, const char __user * user_buffer, size_t size, loff_t * offset) {
     struct trans *trans_data;
-    PDEBUG("write \n");
+    printk(KERN_INFO"trans: write  \n");
     mutex_lock(&trans_mutex);
 
     trans_data = (struct trans *)file->private_data;
 
     if (copy_from_user(trans_data->buffer, user_buffer, size)) {
-        PDEBUG("cannot copy all input to kernel buffer. Exiting");
+        printk(KERN_ERR "Error %d: cannot copy all input to kernel buffer\n", err);
         mutex_unlock(&trans_mutex);
         return -EFAULT;
 
@@ -176,26 +176,26 @@ const struct file_operations trans_fops = {
 static int
 trans_init(void) {
     int err;
-    PDEBUG("Init\n");
+    printk(KERN_INFO"trans: init  \n");
 
-    err = alloc_chrdev_region(&dev_num, trans0->minor, trans_nr_devs, MY_DEVICE_NAME);
+    err = alloc_chrdev_region(&dev_num, 0, trans_nr_devs, MY_DEVICE_NAME);
     trans_major = MAJOR(dev_num);
         
     if (err < 0) {
-        PDEBUG("Unable to get chardevice region, error %d\n", err);
+        printk(KERN_ERR "Error %d: unable to alloc chardevice \n", err);
         return err;
     }
 
     mutex_init(&trans_mutex);
     
-    trans0 = (struct trans *) kmalloc(sizeof(struct trans *), GFP_KERNEL);
+    trans0 = (struct trans *) kmalloc(sizeof(struct trans), GFP_KERNEL);
     if (!trans0) {
-        PDEBUG("kmalloc trans0 error\n");
+        printk(KERN_ERR "Error %d: trans0 kmalloc\n", err);
         return -ENOMEM;
     }
-    trans1 = (struct trans *) kmalloc(sizeof(struct trans *), GFP_KERNEL);
+    trans1 = (struct trans *) kmalloc(sizeof(struct trans), GFP_KERNEL);
     if (!trans1) {
-        PDEBUG("kmalloc trans1 error\n");
+        printk(KERN_ERR "Error %d: adding trans1 kmalloc\n", err);
         return -ENOMEM;
     }
     
@@ -209,7 +209,8 @@ trans_init(void) {
     err = cdev_add (&trans0->cdev, dev_num, 1);
 
     if (err) {
-        PDEBUG("Error %d adding trans0", err);
+        printk(KERN_ERR "Error %d adding trans0\n", err);
+        return err;
     }
 
     cdev_init(&trans1->cdev, &trans_fops);
@@ -222,7 +223,8 @@ trans_init(void) {
     err = cdev_add (&trans1->cdev, dev_num, 1);
 
     if (err) {
-        PDEBUG("Error %d adding trans1", err);
+        printk(KERN_ERR "Error %d adding trans1\n", err);
+        return err;
     }
 
     return 0;
@@ -230,7 +232,7 @@ trans_init(void) {
 
 static void
 trans_exit(void) {
-    PDEBUG("Exit \n");
+    printk(KERN_INFO"trans: init  \n");
     cdev_del(&trans0->cdev);
     cdev_del(&trans1->cdev);
 
