@@ -50,6 +50,7 @@ struct trans {
     int read;
     int write;
     char buffer[40];
+    int size_of_message;
     struct cdev cdev;
 };
 
@@ -114,11 +115,12 @@ trans_read(struct file *file, char __user *user_buffer, size_t size, loff_t *off
     trans_data = (struct trans *)file->private_data;
      
     mutex_lock(&trans_mutex);
-    printk(KERN_INFO"String to print: %s\n", trans_data.buffer);
+    printk(KERN_INFO"String to print: %s\n", trans_data->buffer);
     
     bytes_not_copied = copy_to_user(user_buffer, trans_data->buffer, strlen(trans_data->buffer));
 
     printk(KERN_INFO "bytes_not_copied: %zu\n", bytes_not_copied);
+    printk(KERN_INFO "buffer size: %zu\n", strlen(trans_data->buffer));
 
     mutex_unlock(&trans_mutex);
 
@@ -151,13 +153,14 @@ trans_write (struct file * file, const char __user * user_buffer, size_t size, l
     trans_data = (struct trans *)file->private_data;
 
     if (copy_from_user(trans_data->buffer, user_buffer, size)) {
-        printk(KERN_ERR "Error %d: cannot copy all input to kernel buffer\n", err);
+        printk(KERN_ERR "Error : cannot copy all input to kernel buffer\n");
         mutex_unlock(&trans_mutex);
         return -EFAULT;
 
     }
-
     ceaser_encript(trans_data);
+
+    trans_data->size_of_message = strlen(trans_data->buffer);
 
     mutex_unlock(&trans_mutex);
     return size;
@@ -205,7 +208,9 @@ trans_init(void) {
     trans0->minor = 0;
     trans0->read = 0;
     trans0->write = 0;
+    trans0->size_of_message = 0;
     memset (trans0->buffer, 0, sizeof(trans0->buffer));
+    dev_num = MKDEV(trans_major, 0);
     err = cdev_add (&trans0->cdev, dev_num, 1);
 
     if (err) {
@@ -215,11 +220,12 @@ trans_init(void) {
 
     cdev_init(&trans1->cdev, &trans_fops);
     trans1->cdev.owner = THIS_MODULE;
-    trans1->minor = 0;
+    trans1->minor = 1;
     trans1->read = 0;
     trans1->write = 0;
+    trans1->size_of_message = 0;
     memset (trans1->buffer, 0, sizeof(trans1->buffer));
-    dev_num = MKDEV(trans_major, trans1->minor);
+    dev_num = MKDEV(trans_major, 1);
     err = cdev_add (&trans1->cdev, dev_num, 1);
 
     if (err) {

@@ -3,10 +3,14 @@ module="translate"
 device="trans"
 mode="664"
 
+make clean
+
 # remove module only if its loaded already
 if [ $(lsmod | grep $module -c) -eq 1 ]; then
 	/sbin/rmmod $module
 fi
+
+make
 
 # invoke insmod with all arguments we got
 # and use a pathname, as newer modutils don't look in . by default
