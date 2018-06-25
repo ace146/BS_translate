@@ -57,10 +57,10 @@ static struct trans * trans0;
 static struct trans * trans1;
 
 static struct mutex trans_mutex;
-static struct trans *trans_data;
 
 static int
 trans_open(struct inode *inode, struct file *file) {
+    struct trans *trans_data;
     PDEBUG("open \n");
     mutex_lock(&trans_mutex);
 
@@ -90,6 +90,7 @@ trans_open(struct inode *inode, struct file *file) {
 
 static int
 trans_close (struct inode * inode, struct file *file) {
+    struct trans *trans_data;
     PDEBUG("close \n");
     mutex_lock(&trans_mutex);
     trans_data = (struct trans *)file->private_data;
@@ -108,6 +109,7 @@ trans_close (struct inode * inode, struct file *file) {
 static ssize_t
 trans_read(struct file *file, char __user *user_buffer, size_t size, loff_t *offset) {
     size_t bytes_not_copied;
+    struct trans *trans_data;
     PDEBUG("read \n");
     trans_data = (struct trans *)file->private_data;
      
@@ -130,11 +132,11 @@ ceaser_encript (struct trans* dev) {
     PDEBUG("MINOR-> %d", minor);
 
     while (i != 0) {
-	if (dev->minor == 0) {
+    if (dev->minor == 0) {
             dev->buffer[c] = dev->buffer[c] + rot;
-	} else {
+    } else {
             dev->buffer[c] = dev->buffer[c] - rot;
-	}
+    }
         c++;
         i = dev->buffer[c];
     }
@@ -142,6 +144,7 @@ ceaser_encript (struct trans* dev) {
 
 static ssize_t
 trans_write (struct file * file, const char __user * user_buffer, size_t size, loff_t * offset) {
+    struct trans *trans_data;
     PDEBUG("write \n");
     mutex_lock(&trans_mutex);
 
@@ -244,3 +247,4 @@ trans_exit(void) {
 
 module_init(trans_init);
 module_exit(trans_exit);
+
